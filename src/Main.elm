@@ -112,12 +112,11 @@ isBlocked x y z board =
 isSandwiched : Int -> Int -> Int -> Dict Coords Pai -> Bool
 isSandwiched x y z board =
   let
-    left  = board |> Dict.get ( x - 2, y, z )
-    right = board |> Dict.get ( x + 2, y, z )
+    range = List.range -1 1
+    left  = List.any (\dy -> Dict.member ( x - 2, y + dy, z ) board) range
+    right = List.any (\dy -> Dict.member ( x + 2, y + dy, z ) board) range
   in
-    case ( left, right ) of
-      ( Just _, Just _ ) -> True
-      _                  -> False
+    left && right
 
 isRidden : Int -> Int -> Int -> Dict Coords Pai -> Bool
 isRidden x y z board =
