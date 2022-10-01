@@ -5,6 +5,7 @@
 body {
 	font-family: 'Source Sans Pro', 'Meiryo', 'Hiragino Sans', sans-serif;
 	color: #000E16;
+	font-size: 16px;
 }
 
 #center {
@@ -42,4 +43,10 @@ h2 {
 	-ms-user-select:none;
 	-o-user-select:none;
 	user-select:none;
+}
+
+#elm-area button {
+	font-size: 18px;
+	min-width: 80px;
+	margin: 12px;
 }

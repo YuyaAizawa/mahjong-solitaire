@@ -26,17 +26,21 @@ main =
 
 type alias Model =
   { board : Dict Coords Pai
-  , hold : Maybe Coords
+  , hold : Maybe PaiOnBoard
+  , history : List ( PaiOnBoard, PaiOnBoard )
   }
 
 type alias Coords = ( Int, Int, Int ) -- a pai occupies 2x2x1 Coords
 
 type Pai = Pai Char
 
+type alias PaiOnBoard = ( Coords, Pai )
+
 init : () -> ( Model, Cmd Msg )
 init _ =
   ( { board = Dict.empty
     , hold = Nothing
+    , history = []
     }
   , Random.generate PileUp (pileUp standerdMold allPais)
   )
@@ -60,57 +64,75 @@ standerdMold =
 -- UPDATE --
 
 type Msg
-  = PaiClicked Int Int Int
+  = PaiClicked PaiOnBoard
+  | Undo
   | PileUp (Dict Coords Pai)
 
 update : Msg -> Model -> (Model, Cmd Msg)
-update msg { board, hold } =
+update msg { board, hold, history } =
   case msg of
-    PaiClicked x y z ->
+    PaiClicked ( clickedCoords, clickedPai ) ->
       let
-        newModel =
-          if board |> isBlocked x y z
+        model_ =
+          if isBlocked clickedCoords board
           then
-            Model board hold
+            Model board hold history
           else
             case hold of
 
               Nothing ->
-                Model board (Just ( x, y, z ))
+                Model board (Just ( clickedCoords, clickedPai )) history
 
-              Just ( hx, hy, hz ) ->
-                if ( hx, hy, hz ) == ( x, y, z )
-                then
-                  Model board Nothing
-                else
+              Just ( holdCoords, holdPai ) ->
+                if clickedCoords == holdCoords then
+                  Model board Nothing history
+                else if isMatch holdPai clickedPai then
                   let
-                    oldPai = board |> Dict.get ( hx, hy, hz )
-                    newPai = board |> Dict.get (  x,  y,  z )
-                  in
-                    if isMatch oldPai newPai then
-                      let
-                        newBoard =
-                          board
-                            |> Dict.remove ( hx, hy, hz )
-                            |> Dict.remove ( x, y, z )
-                      in
-                        Model newBoard Nothing
-                    else
-                      Model board hold
-      in
-        ( newModel, Cmd.none )
+                    board_ =
+                      board
+                        |> Dict.remove holdCoords
+                        |> Dict.remove clickedCoords
 
-    PileUp newBoard ->
-      ( Model newBoard Nothing
+                    history_ =
+                      ( ( holdCoords, holdPai )
+                      , ( clickedCoords, clickedPai )
+                      ) :: history
+                  in
+                    Model board_ Nothing history_
+                else
+                  Model board hold history
+      in
+        ( model_, Cmd.none )
+
+    Undo ->
+      let
+        model_ =
+          case history of
+            [] ->
+              Model board Nothing []
+
+            ( ( coords1, pai1 ), ( coords2, pai2 ) ) :: history_ ->
+              let
+                board_ =
+                  board
+                    |> Dict.insert coords1 pai1
+                    |> Dict.insert coords2 pai2
+              in
+                Model board_ Nothing history_
+      in
+        ( model_, Cmd.none )
+
+    PileUp board_ ->
+      ( Model board_ Nothing []
       , Cmd.none
       )
 
-isBlocked : Int -> Int -> Int -> Dict Coords Pai -> Bool
-isBlocked x y z board =
-  isSandwiched x y z board || isRidden x y z board
+isBlocked : Coords -> Dict Coords Pai -> Bool
+isBlocked coords board =
+  isSandwiched coords board || isRidden coords board
 
-isSandwiched : Int -> Int -> Int -> Dict Coords Pai -> Bool
-isSandwiched x y z board =
+isSandwiched : Coords -> Dict Coords Pai -> Bool
+isSandwiched ( x, y, z ) board =
   let
     range = List.range -1 1
     left  = List.any (\dy -> Dict.member ( x - 2, y + dy, z ) board) range
@@ -118,23 +140,19 @@ isSandwiched x y z board =
   in
     left && right
 
-isRidden : Int -> Int -> Int -> Dict Coords Pai -> Bool
-isRidden x y z board =
+isRidden : Coords -> Dict Coords Pai -> Bool
+isRidden ( x, y, z ) board =
   List.range -1 1
     |> List.concatMap (\dy ->
         List.range -1 1
           |> List.map (\dx -> ( x + dx, y + dy, z + 1)))
     |> List.any (\coords -> Dict.member coords board)
 
-isMatch : Maybe Pai -> Maybe Pai -> Bool
-isMatch pai1 pai2 =
-  case ( pai1, pai2 ) of
-    ( Just (Pai char1), Just(Pai char2) ) ->
-      (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
-      (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
-      (char1 == char2)
-    _ ->
-      False
+isMatch : Pai -> Pai -> Bool
+isMatch (Pai char1) (Pai char2) =
+  (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
+  (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
+  (char1 == char2)
 
 
 
@@ -149,6 +167,7 @@ view model =
         , SAttr.viewBox <| "-10 -10 750 550"
         ]
         [ boardView model ]
+    , button [ onClick Undo ] [ text "undo" ]
     ]
 
 boardView : Model -> Svg Msg
@@ -158,23 +177,23 @@ boardView { board, hold } =
       board
         |> Dict.toList
         |> List.sortBy (\( ( _, _, z ), _ ) -> z)
-        |> List.map (\( ( x, y, z ), pai ) -> tileView x y z pai )
+        |> List.map tileView
 
     selected =
       [()]
         |> List.filterMap (\_ -> hold)
-        |> List.map (\( x, y, z ) -> holdView x y z)
+        |> List.map holdView
   in
     Svg.g []
       [ Svg.g [ SAttr.class "board" ] pais
       , Svg.g [ SAttr.class "selected" ] selected
       ]
 
-tileView : Int -> Int -> Int -> Pai -> Svg Msg
-tileView x y z (Pai char) =
+tileView : PaiOnBoard -> Svg Msg
+tileView (( coords, (Pai char) ) as pob) =
   Svg.g
     [ SAttr.class "tile"
-    , translate x y z
+    , translate coords
     ]
     [ Svg.rect
         [ SAttr.x "4"
@@ -184,7 +203,6 @@ tileView x y z (Pai char) =
         , SAttr.width "48"
         , SAttr.height "63"
         , SAttr.fill "#E5CA80"
-        , onClick <| PaiClicked x y z
         ] []
     , Svg.rect
         [ SAttr.x "2"
@@ -194,7 +212,6 @@ tileView x y z (Pai char) =
         , SAttr.width "48"
         , SAttr.height "63"
         , SAttr.fill "#FDF9EE"
-        , onClick <| PaiClicked x y z
         ] []
     , Svg.rect
         [ SAttr.x "0"
@@ -204,7 +221,7 @@ tileView x y z (Pai char) =
         , SAttr.width "48"
         , SAttr.height "63"
         , SAttr.fill "#FDF9EE"
-        , onClick <| PaiClicked x y z
+        , onClick <| PaiClicked pob
         ] []
     , Svg.text_
         [ SAttr.fontSize "90"
@@ -227,11 +244,11 @@ tileView x y z (Pai char) =
         ] []
     ]
 
-holdView : Int -> Int -> Int -> Svg Msg
-holdView x y z =
+holdView : PaiOnBoard -> Svg Msg
+holdView (( coords, _ ) as pob) =
   Svg.g
-    [ translate x y z
-    , onClick <| PaiClicked x y z
+    [ translate coords
+    , onClick <| PaiClicked pob
     ]
     [ Svg.rect
         [ SAttr.x "0.3"
@@ -247,8 +264,8 @@ holdView x y z =
         []
     ]
 
-translate : Int -> Int -> Int -> Svg.Attribute msg
-translate x y z =
+translate : Coords -> Svg.Attribute msg
+translate ( x, y, z ) =
   SAttr.transform <| "translate("
       ++ String.fromInt (x * 24 - z * 4) ++ " "
       ++ String.fromInt (y * 32 - z * 8) ++ ")"
