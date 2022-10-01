@@ -82,17 +82,21 @@ update msg { board, hold } =
                 if ( hx, hy, hz ) == ( x, y, z )
                 then
                   Model board Nothing
-                else if Dict.get ( hx, hy, hz ) board == Dict.get ( x, y, z ) board
-                then
-                  let
-                    newBoard =
-                      board
-                        |> Dict.remove ( hx, hy, hz )
-                        |> Dict.remove ( x, y, z )
-                  in
-                    Model newBoard Nothing
                 else
-                  Model board hold
+                  let
+                    oldPai = board |> Dict.get ( hx, hy, hz )
+                    newPai = board |> Dict.get (  x,  y,  z )
+                  in
+                    if isMatch oldPai newPai then
+                      let
+                        newBoard =
+                          board
+                            |> Dict.remove ( hx, hy, hz )
+                            |> Dict.remove ( x, y, z )
+                      in
+                        Model newBoard Nothing
+                    else
+                      Model board hold
       in
         ( newModel, Cmd.none )
 
@@ -123,14 +127,15 @@ isRidden x y z board =
           |> List.map (\dx -> ( x + dx, y + dy, z + 1)))
     |> List.any (\coords -> Dict.member coords board)
 
-isMatch : Pai -> Pai -> Bool
-isMatch (Pai char1) (Pai char2) =
-  if List.member char1 huapaiChars then
-    List.member char2 huapaiChars
-  else if List.member char1 sijipaiChars then
-    List.member char2 sijipaiChars
-  else
-    char1 == char2
+isMatch : Maybe Pai -> Maybe Pai -> Bool
+isMatch pai1 pai2 =
+  case ( pai1, pai2 ) of
+    ( Just (Pai char1), Just(Pai char2) ) ->
+      (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
+      (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
+      (char1 == char2)
+    _ ->
+      False
 
 
 
@@ -248,6 +253,7 @@ translate x y z =
   SAttr.transform <| "translate("
       ++ String.fromInt (x * 24 - z * 4) ++ " "
       ++ String.fromInt (y * 32 - z * 8) ++ ")"
+
 
 
 -- SUBSCRIPTION --
