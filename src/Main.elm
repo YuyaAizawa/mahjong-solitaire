@@ -29,7 +29,7 @@ type alias Model =
   , hold : Maybe Coords
   }
 
-type alias Coords = ( Int, Int )
+type alias Coords = ( Int, Int, Int ) -- a pai occupies 2x2x1 Coords
 
 type Pai = Pai Char
 
@@ -38,55 +38,57 @@ init _ =
   ( { board = Dict.empty
     , hold = Nothing
     }
-  , Random.generate PileUp (pileUp simpleMold allPais)
+  , Random.generate PileUp (pileUp standerdMold allPais)
   )
 
-simpleMold : List Coords
-simpleMold =
-  List.range 1 4
-    |> List.concatMap (\y ->
-        List.range 1 9
-          |> List.map (\x -> ( x, y )))
-
-allPais : List Pai
-allPais =
-  List.range 1 9
-    |> List.concatMap (\n -> List.repeat 4 (tongzi n))
+standerdMold : List Coords
+standerdMold =
+  standerdMoldString
+    |> List.indexedMap (\z listStr -> ( z, listStr ))
+    |> List.concatMap (\( z, listStr ) ->
+        listStr
+          |> List.indexedMap (\y str -> ( y, str ))
+          |> List.concatMap (\( y, str ) ->
+              str
+                |> String.toList
+                |> List.indexedMap (\x char -> ( ( x, y, z ), char ))))
+    |> List.filter (\( _, char ) -> char == 'o')
+    |> List.map Tuple.first
 
 
 
 -- UPDATE --
 
 type Msg
-  = PaiClicked Int Int
+  = PaiClicked Int Int Int
   | PileUp (Dict Coords Pai)
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg { board, hold } =
   case msg of
-    PaiClicked x y ->
+    PaiClicked x y z ->
       let
         newModel =
-          if board |> isBlocked x y
+          if board |> isBlocked x y z
           then
             Model board hold
           else
             case hold of
 
               Nothing ->
-                Model board (Just ( x, y ))
+                Model board (Just ( x, y, z ))
 
-              Just ( hx, hy ) ->
-                if ( hx, hy ) == ( x, y )
+              Just ( hx, hy, hz ) ->
+                if ( hx, hy, hz ) == ( x, y, z )
                 then
                   Model board Nothing
-                else if Dict.get ( hx, hy ) board == Dict.get ( x, y ) board
+                else if Dict.get ( hx, hy, hz ) board == Dict.get ( x, y, z ) board
                 then
                   let
                     newBoard =
                       board
-                        |> Dict.remove ( hx, hy )
-                        |> Dict.remove (x, y)
+                        |> Dict.remove ( hx, hy, hz )
+                        |> Dict.remove ( x, y, z )
                   in
                     Model newBoard Nothing
                 else
@@ -99,30 +101,48 @@ update msg { board, hold } =
       , Cmd.none
       )
 
-isBlocked : Int -> Int -> Dict Coords Pai -> Bool
-isBlocked x y board =
+isBlocked : Int -> Int -> Int -> Dict Coords Pai -> Bool
+isBlocked x y z board =
+  isSandwiched x y z board || isRidden x y z board
+
+isSandwiched : Int -> Int -> Int -> Dict Coords Pai -> Bool
+isSandwiched x y z board =
   let
-    left  = board |> Dict.get ( x - 1, y )
-    right = board |> Dict.get ( x + 1, y )
+    left  = board |> Dict.get ( x - 2, y, z )
+    right = board |> Dict.get ( x + 2, y, z )
   in
     case ( left, right ) of
       ( Just _, Just _ ) -> True
       _                  -> False
 
+isRidden : Int -> Int -> Int -> Dict Coords Pai -> Bool
+isRidden x y z board =
+  List.range -1 1
+    |> List.concatMap (\dy ->
+        List.range -1 1
+          |> List.map (\dx -> ( x + dx, y + dy, z + 1)))
+    |> List.any (\coords -> Dict.member coords board)
+
+isMatch : Pai -> Pai -> Bool
+isMatch (Pai char1) (Pai char2) =
+  if List.member char1 huapaiChars then
+    List.member char2 huapaiChars
+  else if List.member char1 sijipaiChars then
+    List.member char2 sijipaiChars
+  else
+    char1 == char2
+
 
 
 -- VIEW --
-
-viewBoxWidth  = "560"
-viewBoxHeight = "360"
 
 view : Model -> Html Msg
 view model =
   div [ id "elm-area" ]
     [ Svg.svg
-        [ SAttr.width viewBoxWidth
-        , SAttr.height viewBoxHeight
-        , SAttr.viewBox <| "0 0 "++viewBoxWidth++" "++viewBoxHeight
+        [ SAttr.width "856"
+        , SAttr.height "564"
+        , SAttr.viewBox <| "-10 -10 750 550"
         ]
         [ boardView model ]
     ]
@@ -133,27 +153,46 @@ boardView { board, hold } =
     pais =
       board
         |> Dict.toList
-        |> List.map (\( ( x, y ), pai ) -> tileView x y pai )
+        |> List.sortBy (\( ( _, _, z ), _ ) -> z)
+        |> List.map (\( ( x, y, z ), pai ) -> tileView x y z pai )
 
     selected =
       [()]
         |> List.filterMap (\_ -> hold)
-        |> List.map (\( x, y ) -> holdView x y)
+        |> List.map (\( x, y, z ) -> holdView x y z)
   in
     Svg.g []
       [ Svg.g [ SAttr.class "board" ] pais
       , Svg.g [ SAttr.class "selected" ] selected
       ]
 
-tileView : Int -> Int -> Pai -> Svg Msg
-tileView x y (Pai char) =
+tileView : Int -> Int -> Int -> Pai -> Svg Msg
+tileView x y z (Pai char) =
   Svg.g
     [ SAttr.class "tile"
-    , SAttr.transform <| "translate("
-      ++ String.fromInt (x * 48) ++ " "
-      ++ String.fromInt (y * 64) ++ ")"
+    , translate x y z
     ]
     [ Svg.rect
+        [ SAttr.x "4"
+        , SAttr.y "8"
+        , SAttr.rx "5"
+        , SAttr.ry "5"
+        , SAttr.width "48"
+        , SAttr.height "63"
+        , SAttr.fill "#E5CA80"
+        , onClick <| PaiClicked x y z
+        ] []
+    , Svg.rect
+        [ SAttr.x "2"
+        , SAttr.y "5"
+        , SAttr.rx "5"
+        , SAttr.ry "5"
+        , SAttr.width "48"
+        , SAttr.height "63"
+        , SAttr.fill "#FDF9EE"
+        , onClick <| PaiClicked x y z
+        ] []
+    , Svg.rect
         [ SAttr.x "0"
         , SAttr.y "0"
         , SAttr.rx "5"
@@ -161,7 +200,7 @@ tileView x y (Pai char) =
         , SAttr.width "48"
         , SAttr.height "63"
         , SAttr.fill "#FDF9EE"
-        , onClick <| PaiClicked x y
+        , onClick <| PaiClicked x y z
         ] []
     , Svg.text_
         [ SAttr.fontSize "90"
@@ -184,13 +223,11 @@ tileView x y (Pai char) =
         ] []
     ]
 
-holdView : Int -> Int -> Svg Msg
-holdView x y =
+holdView : Int -> Int -> Int -> Svg Msg
+holdView x y z =
   Svg.g
-    [ SAttr.transform <| "translate("
-      ++ String.fromInt (x * 48) ++ " "
-      ++ String.fromInt (y * 64) ++ ")"
-    , onClick <| PaiClicked x y
+    [ translate x y z
+    , onClick <| PaiClicked x y z
     ]
     [ Svg.rect
         [ SAttr.x "0.3"
@@ -206,6 +243,11 @@ holdView x y =
         []
     ]
 
+translate : Int -> Int -> Int -> Svg.Attribute msg
+translate x y z =
+  SAttr.transform <| "translate("
+      ++ String.fromInt (x * 24 - z * 4) ++ " "
+      ++ String.fromInt (y * 32 - z * 8) ++ ")"
 
 
 -- SUBSCRIPTION --
@@ -213,52 +255,6 @@ holdView x y =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.none
-
-
-
--- PAI --
-
-wanzi : Int -> Pai
-wanzi num =
-  wanziArray
-    |> Array.get (num - 1)
-    |> Maybe.withDefault '\u{0000}'
-    |> Pai
-
-suozi : Int -> Pai
-suozi num =
-  suoziArray
-    |> Array.get (num - 1)
-    |> Maybe.withDefault '\u{0000}'
-    |> Pai
-
-tongzi : Int -> Pai
-tongzi num =
-  tongziArray
-    |> Array.get (num - 1)
-    |> Maybe.withDefault '\u{0000}'
-    |> Pai
-
-wanziArray : Array Char
-wanziArray =
-  List.range 0 8
-    |> List.map (\i -> i + 0x1F007) -- '\u{1F007}' = '🀇'
-    |> List.map Char.fromCode
-    |> Array.fromList
-
-suoziArray : Array Char
-suoziArray =
-  List.range 0 8
-    |> List.map (\i -> i + 0x1F010) -- '\u{1F010}' = '🀐'
-    |> List.map Char.fromCode
-    |> Array.fromList
-
-tongziArray : Array Char
-tongziArray =
-  List.range 0 8
-    |> List.map (\i -> i + 0x1F019) -- '\u{1F019}' = '🀙'
-    |> List.map Char.fromCode
-    |> Array.fromList
 
 
 
@@ -295,3 +291,148 @@ pileUp mold pais =
               |> Dict.fromList
         in
           Random.constant board)
+
+
+
+-- PAI --
+
+allPais : List Pai
+allPais =
+  List.concat
+    [ wanziChars   |> List.concatMap (List.repeat 4)
+    , suoziChars   |> List.concatMap (List.repeat 4)
+    , tongziChars  |> List.concatMap (List.repeat 4)
+    , zipaiChars   |> List.concatMap (List.repeat 4)
+    , huapaiChars
+    , sijipaiChars
+    ]
+    |> List.map Pai
+
+wanziChars : List Char
+wanziChars =
+  List.range 0 8
+    |> List.map (\i -> i + 0x1F007) -- '\u{1F007}' = '🀇'
+    |> List.map Char.fromCode
+
+suoziChars : List Char
+suoziChars =
+  List.range 0 8
+    |> List.map (\i -> i + 0x1F010) -- '\u{1F010}' = '🀐'
+    |> List.map Char.fromCode
+
+tongziChars : List Char
+tongziChars =
+  List.range 0 8
+    |> List.map (\i -> i + 0x1F019) -- '\u{1F019}' = '🀙'
+    |> List.map Char.fromCode
+
+zipaiChars : List Char
+zipaiChars =
+  List.range 0 6
+    |> List.map (\i -> i + 0x1F000) -- '\u{1F000}' = '🀀'
+    |> List.map Char.fromCode
+
+huapaiChars : List Char
+huapaiChars =
+  List.range 0 3
+    |> List.map (\i -> i + 0x1F022) -- '\u{1F022}' = '🀢'
+    |> List.map Char.fromCode
+
+sijipaiChars : List Char
+sijipaiChars =
+  List.range 0 3
+    |> List.map (\i -> i + 0x1F026) -- '\u{1F026}' = '🀦'
+    |> List.map Char.fromCode
+
+
+
+-- MOLD --
+
+standerdMoldString : List (List String)
+standerdMoldString =
+  [ [ "  o o o o o o o o o o o o     "
+    , "                              "
+    , "      o o o o o o o o         "
+    , "                              "
+    , "    o o o o o o o o o o       "
+    , "                              "
+    , "  o o o o o o o o o o o o     "
+    , "o                         o o "
+    , "  o o o o o o o o o o o o     "
+    , "                              "
+    , "    o o o o o o o o o o       "
+    , "                              "
+    , "      o o o o o o o o         "
+    , "                              "
+    , "  o o o o o o o o o o o o     "
+    , "                              "
+    ]
+  , [ "                              "
+    , "                              "
+    , "        o o o o o o           "
+    , "                              "
+    , "        o o o o o o           "
+    , "                              "
+    , "        o o o o o o           "
+    , "                              "
+    , "        o o o o o o           "
+    , "                              "
+    , "        o o o o o o           "
+    , "                              "
+    , "        o o o o o o           "
+    , "                              "
+    , "                              "
+    , "                              "
+    ]
+  , [ "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "          o o o o             "
+    , "                              "
+    , "          o o o o             "
+    , "                              "
+    , "          o o o o             "
+    , "                              "
+    , "          o o o o             "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    ]
+  , [ "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "            o o               "
+    , "                              "
+    , "            o o               "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    ]
+  , [ "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "             o                "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    , "                              "
+    ]
+  ]
