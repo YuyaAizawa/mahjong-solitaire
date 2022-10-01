@@ -6,16 +6,18 @@ import Dict exposing (Dict)
 import Html exposing (Html, div, text, button)
 import Html.Attributes as HAttr exposing (id, class)
 import Html.Events exposing (onClick)
+import Random exposing (Generator)
 import Svg exposing (Svg)
 import Svg.Attributes as SAttr
 
 
 
 main =
-  Browser.sandbox
+  Browser.element
     { init = init
-    , view = view
     , update = update
+    , view = view
+    , subscriptions = subscriptions
     }
 
 
@@ -31,18 +33,25 @@ type alias Coords = ( Int, Int )
 
 type Pai = Pai Char
 
-init : Model
-init =
-  { board = initBoard
-  , hold = Nothing
-  }
+init : () -> ( Model, Cmd Msg )
+init _ =
+  ( { board = Dict.empty
+    , hold = Nothing
+    }
+  , Random.generate PileUp (pileUp simpleMold allPais)
+  )
 
-initBoard =
+simpleMold : List Coords
+simpleMold =
   List.range 1 4
     |> List.concatMap (\y ->
         List.range 1 9
-          |> List.map (\x -> ( ( x, y ), wanzi x )))
-    |> Dict.fromList
+          |> List.map (\x -> ( x, y )))
+
+allPais : List Pai
+allPais =
+  List.range 1 9
+    |> List.concatMap (\n -> List.repeat 4 (tongzi n))
 
 
 
@@ -50,35 +59,45 @@ initBoard =
 
 type Msg
   = PaiClicked Int Int
+  | PileUp (Dict Coords Pai)
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> (Model, Cmd Msg)
 update msg { board, hold } =
   case msg of
     PaiClicked x y ->
-      if board |> isBlocked x y
-      then
-        Model board hold
-      else
-        case hold of
+      let
+        newModel =
+          if board |> isBlocked x y
+          then
+            Model board hold
+          else
+            case hold of
 
-          Nothing ->
-            Model board (Just ( x, y ))
+              Nothing ->
+                Model board (Just ( x, y ))
 
-          Just ( hx, hy ) ->
-            if ( hx, hy ) == ( x, y )
-            then
-              Model board Nothing
-            else if Dict.get ( hx, hy ) board == Dict.get ( x, y ) board
-            then
-              let
-                newBoard =
-                  board
-                    |> Dict.remove ( hx, hy )
-                    |> Dict.remove (x, y)
-              in
-                Model newBoard Nothing
-            else
-              Model board hold
+              Just ( hx, hy ) ->
+                if ( hx, hy ) == ( x, y )
+                then
+                  Model board Nothing
+                else if Dict.get ( hx, hy ) board == Dict.get ( x, y ) board
+                then
+                  let
+                    newBoard =
+                      board
+                        |> Dict.remove ( hx, hy )
+                        |> Dict.remove (x, y)
+                  in
+                    Model newBoard Nothing
+                else
+                  Model board hold
+      in
+        ( newModel, Cmd.none )
+
+    PileUp newBoard ->
+      ( Model newBoard Nothing
+      , Cmd.none
+      )
 
 isBlocked : Int -> Int -> Dict Coords Pai -> Bool
 isBlocked x y board =
@@ -189,6 +208,14 @@ holdView x y =
 
 
 
+-- SUBSCRIPTION --
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+  Sub.none
+
+
+
 -- PAI --
 
 wanzi : Int -> Pai
@@ -232,3 +259,39 @@ tongziArray =
     |> List.map (\i -> i + 0x1F019) -- '\u{1F019}' = '🀙'
     |> List.map Char.fromCode
     |> Array.fromList
+
+
+
+-- SHUFFLE --
+
+jalajala : List Pai -> Generator (List Pai)
+jalajala pais =
+  Random.independentSeed
+    |> Random.map (\initSeed ->
+        pais
+          |> List.foldl
+              (\pai ( list, seed ) ->
+                  let
+                    ( rank, nextSeed ) =
+                      seed |> Random.step anyInt -- ignore minor biases
+                  in
+                    ( ( pai, rank ) :: list, nextSeed ))
+              ( [], initSeed )
+          |> (\( list, _ ) -> list)
+          |> List.sortBy (\( _, rank ) -> rank)
+          |> List.map (\( pai, _ ) -> pai))
+
+anyInt : Generator Int
+anyInt =
+  Random.int Random.minInt Random.maxInt
+
+pileUp : List Coords -> List Pai -> Generator (Dict Coords Pai)
+pileUp mold pais =
+  jalajala pais
+    |> Random.andThen (\shuffled ->
+        let
+          board =
+            List.map2 Tuple.pair mold shuffled
+              |> Dict.fromList
+        in
+          Random.constant board)
