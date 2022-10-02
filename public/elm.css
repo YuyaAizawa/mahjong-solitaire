@@ -34,6 +34,10 @@ h2 {
 	background: #eee;
 }
 
+#elm-area .svg-wrapper {
+	text-align: center;
+}
+
 #elm-area .tile {
 	font-family: 'Noto Sans Symbols 2';
 	-webkit-touch-callout: none;

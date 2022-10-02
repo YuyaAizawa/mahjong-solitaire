@@ -161,12 +161,14 @@ isMatch (Pai char1) (Pai char2) =
 view : Model -> Html Msg
 view model =
   div [ id "elm-area" ]
-    [ Svg.svg
-        [ SAttr.width "856"
-        , SAttr.height "564"
-        , SAttr.viewBox <| "-10 -10 750 550"
+    [ div [ class "svg-wrapper" ]
+        [  Svg.svg
+            [ SAttr.width "760"
+            , SAttr.height "550"
+            , SAttr.viewBox <| "0 0 760 550"
+            ]
+            [ boardView model ]
         ]
-        [ boardView model ]
     , button [ onClick Undo ] [ text "undo" ]
     ]
 
@@ -191,84 +193,92 @@ boardView { board, hold } =
 
 tileView : PaiOnBoard -> Svg Msg
 tileView (( coords, (Pai char) ) as pob) =
-  Svg.g
-    [ SAttr.class "tile"
-    , translate coords
-    ]
-    [ Svg.rect
-        [ SAttr.x "4"
-        , SAttr.y "8"
-        , SAttr.rx "5"
-        , SAttr.ry "5"
-        , SAttr.width "48"
-        , SAttr.height "63"
-        , SAttr.fill "#E5CA80"
-        ] []
-    , Svg.rect
-        [ SAttr.x "2"
-        , SAttr.y "5"
-        , SAttr.rx "5"
-        , SAttr.ry "5"
-        , SAttr.width "48"
-        , SAttr.height "63"
-        , SAttr.fill "#FDF9EE"
-        ] []
-    , Svg.rect
-        [ SAttr.x "0"
-        , SAttr.y "0"
-        , SAttr.rx "5"
-        , SAttr.ry "5"
-        , SAttr.width "48"
-        , SAttr.height "63"
-        , SAttr.fill "#FDF9EE"
-        , onClick <| PaiClicked pob
-        ] []
-    , Svg.text_
-        [ SAttr.fontSize "90"
-        , SAttr.x "-3"
-        , SAttr.y "62"
-        , SAttr.fill "#333"
-        , SAttr.pointerEvents "none"
-        ]
-        [ Svg.text <| String.fromChar <| char ]
-    , Svg.rect
-        [ SAttr.x "0.3"
-        , SAttr.y "0.3"
-        , SAttr.rx "5"
-        , SAttr.ry "5"
-        , SAttr.width "47.5"
-        , SAttr.height "63.5"
-        , SAttr.stroke "#222"
-        , SAttr.strokeWidth "1.5"
-        , SAttr.fill "none"
-        ] []
-    ]
+  let
+    ( attrX, attrY ) = attrXY coords
+  in
+    Svg.g
+      [ SAttr.class "tile"
+      ]
+      [ Svg.rect
+          [ attrX 4.0
+          , attrY 8.0
+          , SAttr.rx "5"
+          , SAttr.ry "5"
+          , SAttr.width "48"
+          , SAttr.height "63"
+          , SAttr.fill "#E5CA80"
+          ] []
+      , Svg.rect
+          [ attrX 2.0
+          , attrY 5.0
+          , SAttr.rx "5"
+          , SAttr.ry "5"
+          , SAttr.width "48"
+          , SAttr.height "63"
+          , SAttr.fill "#FDF9EE"
+          ] []
+      , Svg.rect
+          [ attrX 0.0
+          , attrY 0.0
+          , SAttr.rx "5"
+          , SAttr.ry "5"
+          , SAttr.width "48"
+          , SAttr.height "63"
+          , SAttr.fill "#FDF9EE"
+          , onClick <| PaiClicked pob
+          ] []
+      , Svg.text_
+          [ SAttr.fontSize "90"
+          , attrX -3.0
+          , attrY 62.0
+          , SAttr.fill "#333"
+          , SAttr.pointerEvents "none"
+          ]
+          [ Svg.text <| String.fromChar <| char ]
+      , Svg.rect
+          [ attrX 0.3
+          , attrY 0.3
+          , SAttr.rx "5"
+          , SAttr.ry "5"
+          , SAttr.width "47.5"
+          , SAttr.height "63.5"
+          , SAttr.stroke "#222"
+          , SAttr.strokeWidth "1.5"
+          , SAttr.fill "none"
+          ] []
+      ]
 
 holdView : PaiOnBoard -> Svg Msg
 holdView (( coords, _ ) as pob) =
-  Svg.g
-    [ translate coords
-    , onClick <| PaiClicked pob
-    ]
-    [ Svg.rect
-        [ SAttr.x "0.3"
-        , SAttr.y "0.3"
-        , SAttr.rx "5"
-        , SAttr.ry "5"
-        , SAttr.width "47.5"
-        , SAttr.height "63.5"
-        , SAttr.stroke "#2EE"
-        , SAttr.strokeWidth "2"
-        , SAttr.fill "none"
-        ]
-        []
-    ]
+  let
+    ( attrX, attrY ) = attrXY coords
+  in
+    Svg.g
+      [ onClick <| PaiClicked pob
+      ]
+      [ Svg.rect
+          [ attrX 0.3
+          , attrY 0.3
+          , SAttr.rx "5"
+          , SAttr.ry "5"
+          , SAttr.width "47.5"
+          , SAttr.height "63.5"
+          , SAttr.stroke "#2EE"
+          , SAttr.strokeWidth "2"
+          , SAttr.fill "none"
+          ]
+          []
+      ]
 
-translate : Coords -> Svg.Attribute msg
-translate ( x, y, z ) =
-  SAttr.transform <| "translate("
-      ++ String.fromInt (x * 24 - z * 4) ++ " "
-      ++ String.fromInt (y * 32 - z * 8) ++ ")"
+attrXY : Coords -> ( Float -> Svg.Attribute msg, Float -> Svg.Attribute msg )
+attrXY ( x, y, z ) =
+  let
+    ox = x * 24 - z * 4 + 15 |> toFloat
+    oy = y * 32 - z * 8 + 15 |> toFloat
+  in
+    ( \x_ -> ox + x_ |> String.fromFloat |> SAttr.x
+    , \y_ -> oy + y_ |> String.fromFloat |> SAttr.y
+    )
 
 
 
