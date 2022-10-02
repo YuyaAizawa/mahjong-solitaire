@@ -187,10 +187,11 @@ boardView { board, hold } =
         |> List.filterMap (\_ -> hold)
         |> List.map holdView
   in
-    Svg.g []
-      [ Svg.g [ SAttr.class "board" ] pais
-      , Svg.g [ SAttr.class "selected" ] selected
-      ]
+    Svg.g
+        [ SAttr.transform <| "translate(10 10)" ]
+        [ Svg.g [ SAttr.class "board" ] pais
+        , Svg.g [ SAttr.class "selected" ] selected
+        ]
 
 tileView : PaiOnBoard -> Svg Msg
 tileView (( coords, (Pai char colorOverlay) ) as pob) =
