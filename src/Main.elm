@@ -32,7 +32,8 @@ type alias Model =
 
 type alias Coords = ( Int, Int, Int ) -- a pai occupies 2x2x1 Coords
 
-type Pai = Pai Char String -- kind, color
+type Pai = Pai Char ColorOverlay
+type alias ColorOverlay = List (Svg Msg)
 
 type alias PaiOnBoard = ( Coords, Pai )
 
@@ -192,16 +193,12 @@ boardView { board, hold } =
       ]
 
 tileView : PaiOnBoard -> Svg Msg
-tileView (( coords, (Pai char color) ) as pob) =
+tileView (( coords, (Pai char colorOverlay) ) as pob) =
   let
-    ( attrX, attrY ) = attrXY coords
-  in
-    Svg.g
-      [ SAttr.class "tile"
-      ]
+    base =
       [ Svg.rect
-          [ attrX 4.0
-          , attrY 8.0
+          [ SAttr.x "4"
+          , SAttr.y "8"
           , SAttr.rx "5"
           , SAttr.ry "5"
           , SAttr.width "48"
@@ -209,8 +206,8 @@ tileView (( coords, (Pai char color) ) as pob) =
           , SAttr.fill "#E5CA80"
           ] []
       , Svg.rect
-          [ attrX 2.0
-          , attrY 5.0
+          [ SAttr.x "2"
+          , SAttr.y "5"
           , SAttr.rx "5"
           , SAttr.ry "5"
           , SAttr.width "48"
@@ -218,8 +215,8 @@ tileView (( coords, (Pai char color) ) as pob) =
           , SAttr.fill white
           ] []
       , Svg.rect
-          [ attrX 0.0
-          , attrY 0.0
+          [ SAttr.x "0"
+          , SAttr.y "0"
           , SAttr.rx "5"
           , SAttr.ry "5"
           , SAttr.width "48"
@@ -229,15 +226,17 @@ tileView (( coords, (Pai char color) ) as pob) =
           ] []
       , Svg.text_
           [ SAttr.fontSize "90"
-          , attrX -3.0
-          , attrY 62.0
-          , SAttr.fill color
+          , SAttr.x "-3"
+          , SAttr.y "62"
+          , SAttr.fill black
           , SAttr.pointerEvents "none"
           ]
           [ Svg.text <| String.fromChar <| char ]
-      , Svg.rect
-          [ attrX 0.3
-          , attrY 0.3
+      ]
+    edge =
+      [ Svg.rect
+          [ SAttr.x "0.3"
+          , SAttr.y "0.3"
           , SAttr.rx "5"
           , SAttr.ry "5"
           , SAttr.width "47.5"
@@ -247,38 +246,35 @@ tileView (( coords, (Pai char color) ) as pob) =
           , SAttr.fill "none"
           ] []
       ]
+  in
+    Svg.g [ translate coords , SAttr.class "tile" ]
+      <| base ++ colorOverlay ++ edge
 
 holdView : PaiOnBoard -> Svg Msg
 holdView (( coords, _ ) as pob) =
-  let
-    ( attrX, attrY ) = attrXY coords
-  in
-    Svg.g
-      [ onClick <| PaiClicked pob
-      ]
-      [ Svg.rect
-          [ attrX 0.3
-          , attrY 0.3
-          , SAttr.rx "5"
-          , SAttr.ry "5"
-          , SAttr.width "47.5"
-          , SAttr.height "63.5"
-          , SAttr.stroke "#2EE"
-          , SAttr.strokeWidth "2"
-          , SAttr.fill "none"
-          ]
-          []
-      ]
+  Svg.g
+    [ translate coords
+    , onClick <| PaiClicked pob
+    ]
+    [ Svg.rect
+        [ SAttr.x "0.3"
+        , SAttr.y "0.3"
+        , SAttr.rx "5"
+        , SAttr.ry "5"
+        , SAttr.width "47.5"
+        , SAttr.height "63.5"
+        , SAttr.stroke "#2EE"
+        , SAttr.strokeWidth "2"
+        , SAttr.fill "none"
+        ]
+        []
+    ]
 
-attrXY : Coords -> ( Float -> Svg.Attribute msg, Float -> Svg.Attribute msg )
-attrXY ( x, y, z ) =
-  let
-    ox = x * 24 - z * 4 + 15 |> toFloat
-    oy = y * 32 - z * 8 + 15 |> toFloat
-  in
-    ( \x_ -> ox + x_ |> String.fromFloat |> SAttr.x
-    , \y_ -> oy + y_ |> String.fromFloat |> SAttr.y
-    )
+translate : Coords -> Svg.Attribute msg
+translate ( x, y, z ) =
+  SAttr.transform <| "translate("
+      ++ String.fromInt (x * 24 - z * 4) ++ " "
+      ++ String.fromInt (y * 32 - z * 8) ++ ")"
 
 
 
@@ -388,27 +384,122 @@ sijipaiChars =
     |> List.map (\i -> i + 0x1F026) -- '\u{1F026}' = '🀦'
     |> List.map Char.fromCode
 
-colorPai : Char -> String
-colorPai char =
-  case char of
-    '\u{1F006}' -> white --'🀆'
-    '\u{1F005}' -> green --'🀅'
-    '\u{1F004}' -> red   --'🀄'
-    p ->
-      if List.member p fengpaiChars then
-        blue
-      else
-        black
-
-
-
 -- COLOR --
 
-white = "#FDF9EE"
-black = "#333333"
-red   = "#970C0C"
-green = "#15670C"
-blue  = "#0C3D97"
+colorPai : Char -> ColorOverlay
+colorPai char =
+  case char of
+    '\u{1F006}' -> colorHole white --'🀆'
+    '\u{1F005}' -> colorHole green --'🀅'
+    '\u{1F004}' -> colorHole red   --'🀄'
+    '\u{1F010}' -> coloryizuo      --'🀐'
+    '\u{1F014}' -> colorWuzuo      --'🀔'
+    '\u{1F016}' -> colorQizuo      --'🀖'
+    '\u{1F018}' -> colorjiuzuo     --'🀘'
+    p ->
+      if      wanziChars   |> List.member p then
+        colorLowerHalf red
+      else if fengpaiChars |> List.member p then
+        colorHole blue
+      else
+        []
+
+colorHole : String -> ColorOverlay
+colorHole color =
+  Svg.rect
+      [ SAttr.x "3"
+      , SAttr.y "3"
+      , SAttr.width "43"
+      , SAttr.height "57"
+      , SAttr.fill color
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+            ]
+      []
+    |> List.singleton
+
+colorLowerHalf : String -> ColorOverlay
+colorLowerHalf color =
+  Svg.rect
+      [ SAttr.x "0"
+      , SAttr.y "28"
+      , SAttr.width "47"
+      , SAttr.height "30"
+      , SAttr.fill color
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+      ]
+      []
+    |> List.singleton
+
+coloryizuo =
+  [ Svg.rect
+      [ SAttr.x "16"
+      , SAttr.y "7"
+      , SAttr.width "20"
+      , SAttr.height "6"
+      , SAttr.fill red
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+      ]
+      []
+  , Svg.rect
+      [ SAttr.x "14"
+      , SAttr.y "15"
+      , SAttr.width "7"
+      , SAttr.height "3"
+      , SAttr.fill yellow
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+      ]
+      []
+  ]
+
+colorWuzuo =
+  Svg.rect
+      [ SAttr.x "19"
+      , SAttr.y "18"
+      , SAttr.width "12"
+      , SAttr.height "30"
+      , SAttr.fill red
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+      ]
+      []
+    |> List.singleton
+
+colorQizuo =
+  Svg.rect
+      [ SAttr.x "19"
+      , SAttr.y "0"
+      , SAttr.width "12"
+      , SAttr.height "22"
+      , SAttr.fill red
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+      ]
+      []
+    |> List.singleton
+
+colorjiuzuo =
+  Svg.rect
+      [ SAttr.x "19"
+      , SAttr.y "0"
+      , SAttr.width "12"
+      , SAttr.height "63"
+      , SAttr.fill red
+      , SAttr.class "blend-lighten"
+      , SAttr.pointerEvents "none"
+      ]
+      []
+    |> List.singleton
+
+white  = "#FDF9EE"
+black  = "#333333"
+red    = "#AA0C0C"
+yellow = "#D5AA00"
+green  = "#15870C"
+blue   = "#0C3D97"
 
 
 

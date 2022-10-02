@@ -49,6 +49,10 @@ h2 {
 	user-select:none;
 }
 
+#elm-area .blend-lighten {
+	mix-blend-mode: lighten;
+}
+
 #elm-area button {
 	font-size: 18px;
 	min-width: 80px;
