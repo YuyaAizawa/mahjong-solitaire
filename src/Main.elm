@@ -32,7 +32,7 @@ type alias Model =
 
 type alias Coords = ( Int, Int, Int ) -- a pai occupies 2x2x1 Coords
 
-type Pai = Pai Char
+type Pai = Pai Char String -- kind, color
 
 type alias PaiOnBoard = ( Coords, Pai )
 
@@ -149,7 +149,7 @@ isRidden ( x, y, z ) board =
     |> List.any (\coords -> Dict.member coords board)
 
 isMatch : Pai -> Pai -> Bool
-isMatch (Pai char1) (Pai char2) =
+isMatch (Pai char1 _) (Pai char2 _) =
   (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
   (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
   (char1 == char2)
@@ -192,7 +192,7 @@ boardView { board, hold } =
       ]
 
 tileView : PaiOnBoard -> Svg Msg
-tileView (( coords, (Pai char) ) as pob) =
+tileView (( coords, (Pai char color) ) as pob) =
   let
     ( attrX, attrY ) = attrXY coords
   in
@@ -215,7 +215,7 @@ tileView (( coords, (Pai char) ) as pob) =
           , SAttr.ry "5"
           , SAttr.width "48"
           , SAttr.height "63"
-          , SAttr.fill "#FDF9EE"
+          , SAttr.fill white
           ] []
       , Svg.rect
           [ attrX 0.0
@@ -224,14 +224,14 @@ tileView (( coords, (Pai char) ) as pob) =
           , SAttr.ry "5"
           , SAttr.width "48"
           , SAttr.height "63"
-          , SAttr.fill "#FDF9EE"
+          , SAttr.fill white
           , onClick <| PaiClicked pob
           ] []
       , Svg.text_
           [ SAttr.fontSize "90"
           , attrX -3.0
           , attrY 62.0
-          , SAttr.fill "#333"
+          , SAttr.fill color
           , SAttr.pointerEvents "none"
           ]
           [ Svg.text <| String.fromChar <| char ]
@@ -334,11 +334,13 @@ allPais =
     [ wanziChars   |> List.concatMap (List.repeat 4)
     , suoziChars   |> List.concatMap (List.repeat 4)
     , tongziChars  |> List.concatMap (List.repeat 4)
-    , zipaiChars   |> List.concatMap (List.repeat 4)
+    , fengpaiChars |> List.concatMap (List.repeat 4)
+    , [ baiChar, faChar, zhongChar ]
+        |> List.concatMap (List.repeat 4)
     , huapaiChars
     , sijipaiChars
     ]
-    |> List.map Pai
+    |> List.map (\char -> Pai char (colorPai char))
 
 wanziChars : List Char
 wanziChars =
@@ -358,11 +360,21 @@ tongziChars =
     |> List.map (\i -> i + 0x1F019) -- '\u{1F019}' = '🀙'
     |> List.map Char.fromCode
 
-zipaiChars : List Char
-zipaiChars =
-  List.range 0 6
+fengpaiChars : List Char
+fengpaiChars =
+  List.range 0 3
     |> List.map (\i -> i + 0x1F000) -- '\u{1F000}' = '🀀'
     |> List.map Char.fromCode
+
+baiChar : Char
+baiChar =   '\u{1F006}' --'🀆'
+
+faChar : Char
+faChar =    '\u{1F005}' --'🀅'
+
+zhongChar : Char
+zhongChar = '\u{1F004}' --'🀄'
+
 
 huapaiChars : List Char
 huapaiChars =
@@ -375,6 +387,28 @@ sijipaiChars =
   List.range 0 3
     |> List.map (\i -> i + 0x1F026) -- '\u{1F026}' = '🀦'
     |> List.map Char.fromCode
+
+colorPai : Char -> String
+colorPai char =
+  case char of
+    '\u{1F006}' -> white --'🀆'
+    '\u{1F005}' -> green --'🀅'
+    '\u{1F004}' -> red   --'🀄'
+    p ->
+      if List.member p fengpaiChars then
+        blue
+      else
+        black
+
+
+
+-- COLOR --
+
+white = "#FDF9EE"
+black = "#333333"
+red   = "#970C0C"
+green = "#15670C"
+blue  = "#0C3D97"
 
 
 
