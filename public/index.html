@@ -25,5 +25,10 @@
 <script>
   const app = document.getElementById("elm-area")
   Elm.Main.init({ node: app });
+
+  window.addEventListener('beforeunload', (event) => {
+  event.preventDefault();
+  event.returnValue = 'ページを閉じるとゲームは保存されません';
+});
 </script>
 </html>
