@@ -3,7 +3,7 @@ module Main exposing (main)
 import Array exposing (Array)
 import Browser
 import Dict exposing (Dict)
-import Html exposing (Html, div, text, button)
+import Html exposing (Html, div, text, button, input, label)
 import Html.Attributes as HAttr exposing (id, class)
 import Html.Events exposing (onClick)
 import Random exposing (Generator)
@@ -28,6 +28,7 @@ type alias Model =
   { board : Dict Coords Pai
   , hold : Maybe PaiOnBoard
   , history : List ( PaiOnBoard, PaiOnBoard )
+  , settings : Settings
   }
 
 type alias Coords = ( Int, Int, Int ) -- a pai occupies 2x2x1 Coords
@@ -37,11 +38,20 @@ type alias ColorOverlay = List (Svg Msg)
 
 type alias PaiOnBoard = ( Coords, Pai )
 
+type alias Settings =
+  { jamAlert : Bool
+  , heightColor : Bool
+  }
+
 init : () -> ( Model, Cmd Msg )
 init _ =
   ( { board = Dict.empty
     , hold = Nothing
     , history = []
+    , settings =
+      { jamAlert = False
+      , heightColor = False
+      }
     }
   , Random.generate PileUp (pileUp standerdMold allPais)
   )
@@ -67,26 +77,27 @@ standerdMold =
 type Msg
   = PaiClicked PaiOnBoard
   | Undo
+  | SettingsUpdated Settings
   | PileUp (Dict Coords Pai)
 
 update : Msg -> Model -> (Model, Cmd Msg)
-update msg { board, hold, history } =
+update msg { board, hold, history, settings } =
   case msg of
     PaiClicked ( clickedCoords, clickedPai ) ->
       let
         model_ =
           if isBlocked clickedCoords board
           then
-            Model board hold history
+            Model board hold history settings
           else
             case hold of
 
               Nothing ->
-                Model board (Just ( clickedCoords, clickedPai )) history
+                Model board (Just ( clickedCoords, clickedPai )) history settings
 
               Just ( holdCoords, holdPai ) ->
                 if clickedCoords == holdCoords then
-                  Model board Nothing history
+                  Model board Nothing history settings
                 else if isMatch holdPai clickedPai then
                   let
                     board_ =
@@ -99,9 +110,9 @@ update msg { board, hold, history } =
                       , ( clickedCoords, clickedPai )
                       ) :: history
                   in
-                    Model board_ Nothing history_
+                    Model board_ Nothing history_ settings
                 else
-                  Model board hold history
+                  Model board hold history settings
       in
         ( model_, Cmd.none )
 
@@ -110,7 +121,7 @@ update msg { board, hold, history } =
         model_ =
           case history of
             [] ->
-              Model board Nothing []
+              Model board Nothing [] settings
 
             ( ( coords1, pai1 ), ( coords2, pai2 ) ) :: history_ ->
               let
@@ -119,41 +130,19 @@ update msg { board, hold, history } =
                     |> Dict.insert coords1 pai1
                     |> Dict.insert coords2 pai2
               in
-                Model board_ Nothing history_
+                Model board_ Nothing history_ settings
       in
         ( model_, Cmd.none )
 
-    PileUp board_ ->
-      ( Model board_ Nothing []
+    SettingsUpdated settings_ ->
+      ( Model board hold history settings_
       , Cmd.none
       )
 
-isBlocked : Coords -> Dict Coords Pai -> Bool
-isBlocked coords board =
-  isSandwiched coords board || isRidden coords board
-
-isSandwiched : Coords -> Dict Coords Pai -> Bool
-isSandwiched ( x, y, z ) board =
-  let
-    range = List.range -1 1
-    left  = List.any (\dy -> Dict.member ( x - 2, y + dy, z ) board) range
-    right = List.any (\dy -> Dict.member ( x + 2, y + dy, z ) board) range
-  in
-    left && right
-
-isRidden : Coords -> Dict Coords Pai -> Bool
-isRidden ( x, y, z ) board =
-  List.range -1 1
-    |> List.concatMap (\dy ->
-        List.range -1 1
-          |> List.map (\dx -> ( x + dx, y + dy, z + 1)))
-    |> List.any (\coords -> Dict.member coords board)
-
-isMatch : Pai -> Pai -> Bool
-isMatch (Pai char1 _) (Pai char2 _) =
-  (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
-  (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
-  (char1 == char2)
+    PileUp board_ ->
+      ( Model board_ Nothing [] settings
+      , Cmd.none
+      )
 
 
 
@@ -161,17 +150,32 @@ isMatch (Pai char1 _) (Pai char2 _) =
 
 view : Model -> Html Msg
 view model =
-  div [ id "elm-area" ]
-    [ div [ class "svg-wrapper" ]
-        [  Svg.svg
-            [ SAttr.width "760"
-            , SAttr.height "550"
-            , SAttr.viewBox <| "0 0 760 550"
-            ]
-            [ boardView model ]
-        ]
-    , button [ onClick Undo ] [ text "undo" ]
-    ]
+  let
+    settings =
+      model.settings
+
+  in
+    div [ id "elm-area" ]
+      [ div [ class "svg-wrapper" ]
+          (
+          [ Svg.svg
+              [ SAttr.width "760"
+              , SAttr.height "550"
+              , SAttr.viewBox <| "0 0 760 550"
+              ]
+              [ boardView model ]
+          , div
+              [ class <| "completed" ++ (if Dict.isEmpty model.board then "" else " none") ]
+              [ text "クリアー" ]
+          , div
+              [ class <| "jamed" ++ (if settings.jamAlert && isNohand model.board && not (Dict.isEmpty model.board) then "" else " none") ]
+              [ text "詰みです" ]
+          ]
+          )
+      , button [ onClick Undo ] [ text "undo" ]
+      , checkbox "jamAlert" "詰みを表示" settings.jamAlert (\b -> { settings | jamAlert = b })
+      --, checkbox "heightColor" "高さを色で表示" settings.heightColor (\b -> { settings | heightColor = b })
+      ]
 
 boardView : Model -> Svg Msg
 boardView { board, hold } =
@@ -277,6 +281,19 @@ translate ( x, y, z ) =
       ++ String.fromInt (x * 24 - z * 4) ++ " "
       ++ String.fromInt (y * 32 - z * 8) ++ ")"
 
+checkbox : String -> String -> Bool -> (Bool -> Settings) -> Html Msg
+checkbox name text_ state updater =
+  label [ HAttr.name name ]
+    [ input
+        [ HAttr.type_ "checkbox"
+        , HAttr.checked state
+        , id name
+        , onClick <| SettingsUpdated <| updater <| not state
+        ]
+        []
+    , text text_
+    ]
+
 
 
 -- SUBSCRIPTION --
@@ -284,6 +301,54 @@ translate ( x, y, z ) =
 subscriptions : Model -> Sub Msg
 subscriptions model =
   Sub.none
+
+
+
+-- LOGIC --
+
+isBlocked : Coords -> Dict Coords Pai -> Bool
+isBlocked coords board =
+  isSandwiched coords board || isRidden coords board
+
+isSandwiched : Coords -> Dict Coords Pai -> Bool
+isSandwiched ( x, y, z ) board =
+  let
+    range = List.range -1 1
+    left  = List.any (\dy -> Dict.member ( x - 2, y + dy, z ) board) range
+    right = List.any (\dy -> Dict.member ( x + 2, y + dy, z ) board) range
+  in
+    left && right
+
+isRidden : Coords -> Dict Coords Pai -> Bool
+isRidden ( x, y, z ) board =
+  List.range -1 1
+    |> List.concatMap (\dy ->
+        List.range -1 1
+          |> List.map (\dx -> ( x + dx, y + dy, z + 1)))
+    |> List.any (\coords -> Dict.member coords board)
+
+isMatch : Pai -> Pai -> Bool
+isMatch (Pai char1 _) (Pai char2 _) =
+  (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
+  (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
+  (char1 == char2)
+
+isNohand : Dict Coords Pai -> Bool
+isNohand board =
+  let
+    sorted =
+      board
+        |> Dict.toList
+        |> List.filter (\( coords, _ ) -> not <| isBlocked coords board)
+        |> List.map (\( _, Pai char _ ) -> char )
+        |> List.sort
+
+    ziped =
+      List.map2 Tuple.pair sorted ('\u{0000}' :: sorted)
+  in
+    ziped
+      |> List.any (\( c1, c2 ) -> c1 == c2)
+      |> not
 
 
 
@@ -384,6 +449,8 @@ sijipaiChars =
   List.range 0 3
     |> List.map (\i -> i + 0x1F026) -- '\u{1F026}' = '🀦'
     |> List.map Char.fromCode
+
+
 
 -- COLOR --
 
