@@ -174,17 +174,17 @@ view model =
           )
       , button [ onClick Undo ] [ text "undo" ]
       , checkbox "jamAlert" "詰みを表示" settings.jamAlert (\b -> { settings | jamAlert = b })
-      --, checkbox "heightColor" "高さを色で表示" settings.heightColor (\b -> { settings | heightColor = b })
+      , checkbox "heightColor" "高さを色で表示" settings.heightColor (\b -> { settings | heightColor = b })
       ]
 
 boardView : Model -> Svg Msg
-boardView { board, hold } =
+boardView { board, hold, settings } =
   let
     pais =
       board
         |> Dict.toList
         |> List.sortBy (\( ( _, _, z ), _ ) -> z)
-        |> List.map tileView
+        |> List.map (tileView settings.heightColor)
 
     selected =
       [()]
@@ -197,9 +197,26 @@ boardView { board, hold } =
         , Svg.g [ SAttr.class "selected" ] selected
         ]
 
-tileView : PaiOnBoard -> Svg Msg
-tileView (( coords, (Pai char colorOverlay) ) as pob) =
+tileView : Bool -> PaiOnBoard -> Svg Msg
+tileView heightColor (( coords, (Pai char colorOverlay) ) as pob) =
   let
+    face =
+      if heightColor then
+        case coords of
+          ( _, _, 4 ) -> "#FFD8D8"
+          ( _, _, 3 ) -> "#F7FFD8"
+          ( _, _, 2 ) -> "#D8FFE8"
+          ( _, _, 1 ) -> "#D8E8FF"
+          _           -> "#F7D8FF"
+      else
+        white
+
+    char_ =
+      if char == baiChar then
+        ' '
+      else
+        char
+
     base =
       [ Svg.rect
           [ SAttr.x "4"
@@ -217,7 +234,7 @@ tileView (( coords, (Pai char colorOverlay) ) as pob) =
           , SAttr.ry "5"
           , SAttr.width "48"
           , SAttr.height "63"
-          , SAttr.fill white
+          , SAttr.fill face
           ] []
       , Svg.rect
           [ SAttr.x "0"
@@ -226,7 +243,7 @@ tileView (( coords, (Pai char colorOverlay) ) as pob) =
           , SAttr.ry "5"
           , SAttr.width "48"
           , SAttr.height "63"
-          , SAttr.fill white
+          , SAttr.fill face
           , onClick <| PaiClicked pob
           ] []
       , Svg.text_
@@ -236,7 +253,7 @@ tileView (( coords, (Pai char colorOverlay) ) as pob) =
           , SAttr.fill black
           , SAttr.pointerEvents "none"
           ]
-          [ Svg.text <| String.fromChar <| char ]
+          [ Svg.text <| String.fromChar <| char_ ]
       ]
     edge =
       [ Svg.rect
@@ -457,7 +474,6 @@ sijipaiChars =
 colorPai : Char -> ColorOverlay
 colorPai char =
   case char of
-    '\u{1F006}' -> colorHole white --'🀆'
     '\u{1F005}' -> colorHole green --'🀅'
     '\u{1F004}' -> colorHole red   --'🀄'
     '\u{1F010}' -> coloryizuo      --'🀐'
