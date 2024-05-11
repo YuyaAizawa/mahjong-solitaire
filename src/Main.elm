@@ -357,14 +357,16 @@ isNohand board =
       board
         |> Dict.toList
         |> List.filter (\( coords, _ ) -> not <| isBlocked coords board)
-        |> List.map (\( _, Pai char _ ) -> char )
-        |> List.sort
+        |> List.map (\( _, pai ) -> pai)
+        |> List.sortBy (\(Pai char _ ) -> char)
+
+    dummy = Pai '\u{0000}' []
 
     ziped =
-      List.map2 Tuple.pair sorted ('\u{0000}' :: sorted)
+      List.map2 Tuple.pair sorted (dummy :: sorted)
   in
     ziped
-      |> List.any (\( c1, c2 ) -> c1 == c2)
+      |> List.any (\( pai1, pai2 ) -> isMatch pai1 pai2)
       |> not
 
 
