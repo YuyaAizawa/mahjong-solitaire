@@ -140,9 +140,13 @@ update msg { board, hold, history, settings } =
       )
 
     PileUp board_ ->
-      ( Model board_ Nothing [] settings
-      , Cmd.none
-      )
+      let
+        test =
+          solve board_
+      in
+        ( Model board_ Nothing [] settings
+        , Cmd.none
+        )
 
 
 
@@ -323,6 +327,14 @@ subscriptions model =
 
 -- LOGIC --
 
+type alias AtLeastOne a = ( a, List a )
+
+isMatch : Pai -> Pai -> Bool
+isMatch (Pai char1 _) (Pai char2 _) =
+  (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
+  (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
+  (char1 == char2)
+
 isBlocked : Coords -> Dict Coords Pai -> Bool
 isBlocked coords board =
   isSandwiched coords board || isRidden coords board
@@ -344,30 +356,57 @@ isRidden ( x, y, z ) board =
           |> List.map (\dx -> ( x + dx, y + dy, z + 1)))
     |> List.any (\coords -> Dict.member coords board)
 
-isMatch : Pai -> Pai -> Bool
-isMatch (Pai char1 _) (Pai char2 _) =
-  (List.member char1 huapaiChars && List.member char2 huapaiChars) ||
-  (List.member char1 sijipaiChars && List.member char2 sijipaiChars) ||
-  (char1 == char2)
-
 isNohand : Dict Coords Pai -> Bool
 isNohand board =
+  board
+    |> getCandidates
+    |> List.isEmpty
+
+getCandidates : Dict Coords Pai -> List ( PaiOnBoard, PaiOnBoard )
+getCandidates board =
   let
     sorted =
       board
         |> Dict.toList
         |> List.filter (\( coords, _ ) -> not <| isBlocked coords board)
-        |> List.map (\( _, pai ) -> pai)
-        |> List.sortBy (\(Pai char _ ) -> char)
+        |> List.sortBy (\( _, (Pai char _ ) ) -> char)
 
-    dummy = Pai '\u{0000}' []
-
-    ziped =
-      List.map2 Tuple.pair sorted (dummy :: sorted)
+    grouped =
+      sorted
+        |> groupByPai
+        |> List.map (\( hd, tl ) -> hd :: tl)
   in
-    ziped
-      |> List.any (\( pai1, pai2 ) -> isMatch pai1 pai2)
-      |> not
+    grouped
+      |> List.filter (\list -> List.length list > 1)
+      |> List.concatMap allPairs
+
+groupByPai : List PaiOnBoard -> List (AtLeastOne PaiOnBoard)
+groupByPai list =
+  groupByPaiHelper list []
+
+groupByPaiHelper : List PaiOnBoard -> List (AtLeastOne PaiOnBoard) -> List (AtLeastOne PaiOnBoard)
+groupByPaiHelper lest acc =
+  case lest of
+    [] -> acc |> List.reverse
+
+    (( _, pai ) as hd) :: tl ->
+      case acc of
+        [] -> groupByPaiHelper tl [(hd , [])]
+
+        ( ( _, reprPai ) as repr, group ) :: others ->
+          if isMatch pai reprPai then
+            groupByPaiHelper tl (( repr, hd :: group ) :: others)
+          else
+            groupByPaiHelper tl (( hd, [] ) :: ( repr, group ) :: others)
+
+allPairs : List a -> List ( a, a )
+allPairs list =
+  case list of
+    [] ->
+      []
+
+    hd :: tl ->
+      List.map (Tuple.pair hd) tl ++ allPairs tl
 
 
 
@@ -404,6 +443,49 @@ pileUp mold pais =
               |> Dict.fromList
         in
           Random.constant board)
+
+
+
+-- SEARCH --
+
+solve : Dict Coords Pai -> Bool
+solve board =
+  let
+    ( _, result ) =
+      solveHelper 0 (board |> getCandidates) board
+        |> Debug.log "solve"
+  in
+    result
+
+solveHelper : Int -> List ( PaiOnBoard, PaiOnBoard ) -> Dict Coords Pai -> ( Int, Bool )
+solveHelper count candidates board =
+  if board |> Dict.isEmpty then
+    ( count, True )
+  else
+    case candidates of
+      [] ->
+        ( count, False )
+
+      ( ( c1, _ ), ( c2, _ ) ) :: restCandidates ->
+        let
+          nextBoard =
+            board
+              |> Dict.remove c1
+              |> Dict.remove c2
+
+          log =
+            case modBy 1000 (count + 1) == 0 of
+              True ->
+                ((count + 1), nextBoard |> Dict.size ) |> Debug.log "count, restOnBoard"
+              False ->
+                ( 0, 0 )
+        in
+          case solveHelper (count + 1) (nextBoard |> getCandidates) nextBoard of
+            ( count_, True ) ->
+              ( count_, True )
+
+            ( count_, False ) ->
+              solveHelper count_ restCandidates board
 
 
 
